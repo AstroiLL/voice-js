@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Веб-приложение для приема текста (Curl Editor)</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --sidebar-bg: #252526;
+            --text-color: #d4d4d4;
+            --accent-color: #007acc;
+            --accent-hover: #0098ff;
+            --border-color: #3e3e42;
+            --success-color: #4ec9b0;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --mono-font: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Боковая панель управления и логов */
+        aside {
+            width: 300px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            flex-shrink: 0;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #808080;
+            margin-right: 10px;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .status-dot.active {
+            background-color: var(--success-color);
+            box-shadow: 0 0 8px var(--success-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .log-panel {
+            flex-grow: 1;
+            background-color: #1e1e1e;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: var(--mono-font);
+            font-size: 0.8rem;
+            margin-bottom: 20px;
+            color: #858585;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 2px;
+        }
+        .log-entry.success { color: var(--success-color); }
+        .log-entry.info { color: var(--accent-color); }
+
+        .simulation-controls {
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+
+        .simulation-controls h3 {
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            background-color: #3c3c3c;
+            border: 1px solid var(--border-color);
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: #3e3e42;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #4e4e52;
+        }
+
+        /* Основная область редактора */
+        main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .toolbar {
+            height: 50px;
+            background-color: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+        }
+
+        .toolbar-info {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .toolbar-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: #ccc;
+            padding: 5px 15px;
+            font-size: 0.85rem;
+            width: auto;
+            margin: 0;
+        }
+        .toolbar-btn:hover {
+            background-color: #3e3e42;
+            color: white;
+        }
+        .btn-copy {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .btn-copy:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .editor-wrapper {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: none;
+            padding: 20px;
+            font-family: var(--mono-font);
+            font-size: 1rem;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+        }
+
+        textarea::placeholder {
+            color: #555;
+        }
+
+        /* Тост уведомление */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            aside { width: 100%; height: 250px; order: 2; border-right: none; border-top: 1px solid var(--border-color); }
+            main { height: calc(100vh - 250px); order: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Боковая панель -->
+    <aside>
+        <h1>Текстовый Приемник</h1>
+        
+        <div class="status-indicator">
+            <div class="status-dot active" id="statusDot"></div>
+            <span id="statusText">Ожидание данных...</span>
+        </div>
+
+        <div class="log-panel" id="logPanel">
+            <div class="log-entry info">[System] Приложение запущено</div>
+            <div class="log-entry info">[System] Готов к приему запросов</div>
+        </div>
+
+        <div class="simulation-controls">
+            <h3>Эмуляция Curl запроса</h3>
+            <p style="font-size: 0.75rem; color: #888; margin-bottom: 10px;">
+                Поскольку браузер не может принимать прямые curl запросы без сервера, используйте эту кнопку для симуляции входящих данных.
+            </p>
+            
+            <div class="input-group">
+                <label for="incomingText">Текст из запроса:</label>
+                <input type="text" id="incomingText" value="Пример текста от стороннего приложения" placeholder="Введите текст...">
+            </div>
+
+            <button class="btn-primary" id="btnSimulate">Отправить (Симуляция)</button>
+            <button class="btn-secondary" id="btnClearLog">Очистить логи</button>
+        </div>
+    </aside>
+
+    <!-- Основная область -->
+    <main>
+        <div class="toolbar">
+            <div class="toolbar-info">
+                Режим: <span style="color: var(--success-color)">Только чтение / Редактирование</span>
+            </div>
+            <div class="toolbar-actions">
+                <button class="toolbar-btn" id="btnDownload">Скачать .txt</button>
+                <button class="toolbar-btn" id="btnClearEditor">Очистить</button>
+                <button class="toolbar-btn btn-copy" id="btnCopy">Копировать в буфер</button>
+            </div>
+        </div>
+
+        <div class="editor-wrapper">
+            <textarea id="mainEditor" placeholder="Здесь появится текст, полученный от приложения..."></textarea>
+        </div>
+    </main>
+
+    <!-- Всплывающее уведомление -->
+    <div class="toast" id="toast">Текст скопирован!</div>
+
+    <script>
+        // Элементы DOM
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const logPanel = document.getElementById('logPanel');
+        const mainEditor = document.getElementById('mainEditor');
+        const incomingInput = document.getElementById('incomingText');
+        const btnSimulate = document.getElementById('btnSimulate');
+        const btnCopy = document.getElementById('btnCopy');
+        const btnClearEditor = document.getElementById('btnClearEditor');
+        const btnClearLog = document.getElementById('btnClearLog');
+        const btnDownload = document.getElementById('btnDownload');
+        const toast = document.getElementById('toast');
+
+        // Функция для добавления записи в лог
+        function addLog(message, type = 'normal') {
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${time}] ${message}`;
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight; // Авто-скролл вниз
+        }
+
+        // Функция обработки входящих данных (имитация приема curl запроса)
+        function handleIncomingData(data) {
+            // 1. Обновляем статус
+            statusDot.style.backgroundColor = 'var(--success-color)';
+            statusDot.style.boxShadow = '0 0 10px var(--success-color)';
+            statusText.textContent = 'Данные получены';
+            
+            // 2. Логируем
+            addLog(`Получен POST запрос (${data.length} байт)`, 'success');
+            addLog(`Payload: "${data.substring(0, 20)}${data.length > 20 ? '...' : ''}"`);
+
+            // 3. Заполняем редактор (с анимацией вспышки)
+            mainEditor.value = data;
+            mainEditor.style.backgroundColor = '#2d2d30'; // Легкая вспышка
+            setTimeout(() => {
+                mainEditor.style.backgroundColor = 'var(--bg-color)';
+                statusDot.className = 'status-dot active'; // Возвращаем пульсацию
+            }, 300);
+
+            showToast('Данные загружены в редактор');
+        }
+
+        // Показать уведомление
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- Обработчики событий ---
+
+        // Симуляция входящего запроса
+        btnSimulate.addEventListener('click', () => {
+            const payload = incomingInput.value;
+            if (!payload) {
+                showToast('Введите текст для симуляции!');
+                return;
+            }
+            // Имитация задержки сети
+            statusText.textContent = 'Обработка...';
+            setTimeout(() => {
+                handleIncomingData(payload);
+            }, 500);
+        });
+
+        // Копирование в буфер
+        btnCopy.addEventListener('click', async () => {
+            const text = mainEditor.value;
+            if (!text) {
+                showToast('Редактор пуст!');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Скопировано в буфер обмена');
+            } catch (err) {
+                console.error('Ошибка копирования: ', err);
+                showToast('Не удалось скопировать');
+            }
+        });
+
+        // Очистка редактора
+        btnClearEditor.addEventListener('click', () => {
+            if(confirm('Вы уверены, что хотите очистить редактор?')) {
+                mainEditor.value = '';
+                statusText.textContent = 'Ожидание данных...';
+                addLog('Редактор очищен пользователем');
+            }
+        });
+
+        // Очистка логов
+        btnClearLog.addEventListener('click', () => {
+            logPanel.innerHTML = '';
+            addLog('Логи очищены', 'info');
+        });
+
+        // Скачивание как .txt
+        btnDownload.addEventListener('click', () => {
+            const text = mainEditor.value;
+            if (!text) {
+                showToast('Нечего скачивать');
+                return;
+            }
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'received_text.txt';
+            a.click();
+            window.URL.revokeObjectURL(url);
+            addLog('Файл скачан', 'info');
+        });
+
+        // Инициализация
+        addLog('Интерфейс готов. Ожидание данных.', 'info');
+
+        /* 
+           ПРИМЕЧАНИЕ ДЛЯ РАЗРАБОТЧИКА:
+           Если вы хотите подключить это к реальному серверу (например, Node.js/Python),
+           вы можете использовать fetch или WebSocket.
+           
+           Пример поллинга (опроса сервера каждые 2 секунды):
+           
+           setInterval(async () => {
+               try {
+                   const response = await fetch('/api/get-message');
+                   if (response.ok) {
+                       const data = await response.json();
+                       if (data.text && data.text !== mainEditor.value) {
+                           handleIncomingData(data.text);
+                       }
+                   }
+               } catch (e) { console.log('Сервер недоступен'); }
+           }, 2000);
+        */
+
+    </script>
+</body>
+</html>
